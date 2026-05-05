@@ -105,6 +105,7 @@ button,textarea{font-family:inherit}
 .sug-card.pri .sug-name{color:var(--lime)}
 .sug-detail{font-size:12px;color:var(--sub);margin-top:2px}
 .sug-arr{color:var(--muted);font-size:18px;flex-shrink:0}
+.sug-card *{pointer-events:none}
 
 /* ── RECENT SCROLL ── */
 .recent-scroll{
@@ -971,31 +972,33 @@ function renderSuggestions(){
 }
 
 function handleSugClick(el){
-  // Read ids from data attribute — avoids JSON quote-breaking HTML attributes
-  var ids = el.getAttribute("data-ids").split(",").filter(Boolean);
+  // Walk up to find the element with data-ids (in case a child was tapped)
+  var target = el;
+  while(target && !target.getAttribute("data-ids")){
+    target = target.parentElement;
+  }
+  if(!target) return;
+  var ids = target.getAttribute("data-ids").split(",").filter(Boolean);
   comboSelect(ids);
 }
 function comboSelect(ids){
-  // Always snap to today when selecting from suggestion
   logDateOffset = 0;
-  // Set exactly these muscles, clear anything else
   todayDraft = ids.slice();
   pairDismissed = true;
   renderLogCard();
-  // Wait for DOM to update, then scroll confirm into view and flash it
+  // Give DOM time to paint, then scroll log-wrap into view
   setTimeout(function(){
-    const btn = document.getElementById("confirm-btn");
+    var logWrap = document.querySelector(".log-wrap");
+    if(logWrap) logWrap.scrollIntoView({behavior:"smooth", block:"start"});
+  }, 80);
+  setTimeout(function(){
+    var btn = document.getElementById("confirm-btn");
     if(btn){
       btn.scrollIntoView({behavior:"smooth", block:"center"});
-      btn.style.transition = "transform 0.12s ease, background 0.12s ease";
-      btn.style.transform = "scale(1.08)";
-      btn.style.background = "#e8ff50";
-      setTimeout(function(){
-        btn.style.transform = "";
-        btn.style.background = "";
-      }, 280);
+      btn.style.boxShadow = "0 0 0 4px rgba(200,241,53,0.6)";
+      setTimeout(function(){ btn.style.boxShadow = ""; }, 1000);
     }
-  }, 180);
+  }, 400);
 }
 
 /* ── RECENT ── */
