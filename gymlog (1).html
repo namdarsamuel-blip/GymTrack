@@ -784,7 +784,7 @@ button,textarea{font-family:inherit}
 
 <script>
 const SHEET_URL = "https://script.google.com/macros/s/AKfycbxG55J_qLCrQ8iS2HxGTpaR9E4EzEOsvB0mUOleNAYPkLMDdea3NS6erglPpKKzcMdoCw/exec";
-const CACHE_KEY = "gymlog_v7";
+const CACHE_KEY = "gymlog_v8";
 
 /* ── MUSCLES ── */
 const M = {
@@ -843,15 +843,22 @@ function todayKey(){const d=new Date();return`${d.getFullYear()}-${pad(d.getMont
 function fmtS(key){const[,m,d]=key.split("-");return`${MONTHS_S[parseInt(m)-1]} ${parseInt(d)}`}
 function fmtF(key){const[y,m,d]=key.split("-");return`${MONTHS_S[parseInt(m)-1]} ${parseInt(d)}, ${y}`}
 function toDayNum(k){
-  const [y,m,d]=k.split("-").map(Number);
-  const a=Math.floor((14-m)/12), yr=y+4800-a, mo=m+12*a-3;
+  if(!k||typeof k!=="string") return 0;
+  const parts=k.split("-").map(Number);
+  if(parts.length<3||parts.some(isNaN)) return 0;
+  const [y,m,d]=parts;
+  const a=Math.floor((14-m)/12),yr=y+4800-a,mo=m+12*a-3;
   return d+Math.floor((153*mo+2)/5)+365*yr+Math.floor(yr/4)-Math.floor(yr/100)+Math.floor(yr/400)-32045;
 }
-function dateDiff(olderKey,newerKey){ return toDayNum(newerKey)-toDayNum(olderKey); }
+function dateDiff(olderKey,newerKey){
+  if(!olderKey||!newerKey) return 0;
+  return toDayNum(newerKey)-toDayNum(olderKey);
+}
 function daysAgo(key){
   const today=todayKey();
   if(key===today)return"Today";
   const diff=dateDiff(key,today);
+  if(isNaN(diff)||diff<0)return"";
   if(diff===1)return"Yesterday";
   if(diff<7)return diff+"d ago";
   if(diff<30)return Math.floor(diff/7)+"w ago";
@@ -962,9 +969,26 @@ function renderSuggestions(){
 }
 
 function comboSelect(ids){
-  ids.forEach(id=>{if(!todayDraft.includes(id))todayDraft.push(id)});
+  // Always snap to today when selecting from suggestion
+  logDateOffset = 0;
+  // Set exactly these muscles, clear anything else
+  todayDraft = ids.slice();
+  pairDismissed = true;
   renderLogCard();
-  document.querySelector(".log-wrap").scrollIntoView({behavior:"smooth",block:"start"});
+  // Wait for DOM to update, then scroll confirm into view and flash it
+  setTimeout(function(){
+    const btn = document.getElementById("confirm-btn");
+    if(btn){
+      btn.scrollIntoView({behavior:"smooth", block:"center"});
+      btn.style.transition = "transform 0.12s ease, background 0.12s ease";
+      btn.style.transform = "scale(1.08)";
+      btn.style.background = "#e8ff50";
+      setTimeout(function(){
+        btn.style.transform = "";
+        btn.style.background = "";
+      }, 280);
+    }
+  }, 180);
 }
 
 /* ── RECENT ── */
