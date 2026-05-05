@@ -934,46 +934,47 @@ function renderAll(){renderSuggestions();renderRecent();renderLogCard();renderSt
    Show top 3, sorted most-overdue first. No date text shown.
 */
 function renderSuggestions(){
-  // Keys sorted oldest→newest as strings (YYYY-MM-DD sorts correctly as strings)
   const keys = Object.keys(workouts).sort();
-  const n    = keys.length;
 
-  // For each group, find its "recency index":
-  // n   = never trained (most overdue)
-  // n-1 = trained in the oldest session (very overdue)
-  // 0   = trained in the most recent session (least overdue)
-  // Lower index = more recently trained = lower priority
   function recencyIndex(ids){
-    // Search from most-recent backward; return the index from the END
-    // The further back you have to go, the more overdue it is
-    for(let i = keys.length - 1; i >= 0; i--){
-      const w = workouts[keys[i]];
-      if(ids.some(id => w.muscles && w.muscles.includes(id))){
-        // Return how many sessions ago this was (0 = most recent session)
-        return (keys.length - 1) - i;
+    for(let i=keys.length-1; i>=0; i--){
+      const w=workouts[keys[i]];
+      if(ids.some(function(id){return w.muscles&&w.muscles.includes(id);})){
+        return (keys.length-1)-i;
       }
     }
-    return 99999; // never trained
+    return 99999;
   }
 
-  // Sort by recency index DESCENDING — highest number = most overdue = rank 1
   const ranked = SUG_GROUPS
-    .map(g => ({...g, idx: recencyIndex(g.ids)}))
-    .sort((a,b) => b.idx - a.idx)
-    .slice(0, 3);
+    .map(function(g){return {label:g.label,sub:g.sub,ids:g.ids,c:g.c,bg:g.bg,idx:recencyIndex(g.ids)};})
+    .sort(function(a,b){return b.idx-a.idx;})
+    .slice(0,3);
 
-  document.getElementById("sug-wrap").innerHTML = ranked.map((g,i) => `
-    <div class="sug-card${i===0?" pri":""}" onclick="comboSelect(${JSON.stringify(g.ids)})">
-      <div class="sug-rank">${i+1}</div>
-      <div class="sug-badge" style="background:${g.bg};color:${g.c}">${g.ids.map(id=>M[id]?.abbr).join("+")}</div>
-      <div class="sug-info">
-        <div class="sug-name">${g.label}</div>
-        ${g.sub?`<div class="sug-detail">${g.sub}</div>`:''}
-      </div>
-      <div class="sug-arr">›</div>
-    </div>`).join("");
+  var html = "";
+  ranked.forEach(function(g,i){
+    // Build abbrs without template literals to avoid quote conflicts
+    var abbrs = g.ids.map(function(id){return M[id]?M[id].abbr:id;}).join("+");
+    // Store ids as a data attribute — no quote conflicts
+    var idsAttr = g.ids.join(",");
+    html += '<div class="sug-card'+(i===0?" pri":"")+'" data-ids="'+idsAttr+'" onclick="handleSugClick(this)">'
+      +'<div class="sug-rank">'+(i+1)+'</div>'
+      +'<div class="sug-badge" style="background:'+g.bg+';color:'+g.c+'">'+abbrs+'</div>'
+      +'<div class="sug-info">'
+        +'<div class="sug-name">'+g.label+'</div>'
+        +(g.sub?'<div class="sug-detail">'+g.sub+'</div>':"")
+      +'</div>'
+      +'<div class="sug-arr">›</div>'
+      +'</div>';
+  });
+  document.getElementById("sug-wrap").innerHTML = html;
 }
 
+function handleSugClick(el){
+  // Read ids from data attribute — avoids JSON quote-breaking HTML attributes
+  var ids = el.getAttribute("data-ids").split(",").filter(Boolean);
+  comboSelect(ids);
+}
 function comboSelect(ids){
   // Always snap to today when selecting from suggestion
   logDateOffset = 0;
