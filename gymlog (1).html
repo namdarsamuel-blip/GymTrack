@@ -839,26 +839,31 @@ let editKey       = null, editDraft = [];
 
 /* ── HELPERS ── */
 function pad(n){return String(n).padStart(2,"0")}
-function todayKey(){const d=new Date();return`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`}
+function todayKey(){
+  // Use UTC to match how we parse keys — avoids timezone off-by-one
+  const d=new Date();
+  return d.getUTCFullYear()+"-"+pad(d.getUTCMonth()+1)+"-"+pad(d.getUTCDate());
+}
 function fmtS(key){const[,m,d]=key.split("-");return`${MONTHS_S[parseInt(m)-1]} ${parseInt(d)}`}
 function fmtF(key){const[y,m,d]=key.split("-");return`${MONTHS_S[parseInt(m)-1]} ${parseInt(d)}, ${y}`}
-function toDayNum(k){
-  if(!k||typeof k!=="string") return 0;
-  const parts=k.split("-").map(Number);
-  if(parts.length<3||parts.some(isNaN)) return 0;
-  const [y,m,d]=parts;
-  const a=Math.floor((14-m)/12),yr=y+4800-a,mo=m+12*a-3;
-  return d+Math.floor((153*mo+2)/5)+365*yr+Math.floor(yr/4)-Math.floor(yr/100)+Math.floor(yr/400)-32045;
+function keyToMs(k){
+  // Parse YYYY-MM-DD as UTC midnight to avoid any timezone issues
+  if(!k||k.length<10) return 0;
+  const y=parseInt(k.slice(0,4),10);
+  const m=parseInt(k.slice(5,7),10)-1;
+  const d=parseInt(k.slice(8,10),10);
+  return Date.UTC(y,m,d);
 }
 function dateDiff(olderKey,newerKey){
-  if(!olderKey||!newerKey) return 0;
-  return toDayNum(newerKey)-toDayNum(olderKey);
+  // Returns whole calendar days between two YYYY-MM-DD keys
+  const ms=keyToMs(newerKey)-keyToMs(olderKey);
+  return Math.round(ms/86400000);
 }
 function daysAgo(key){
   const today=todayKey();
   if(key===today)return"Today";
   const diff=dateDiff(key,today);
-  if(isNaN(diff)||diff<0)return"";
+  if(!diff||isNaN(diff)||diff<0)return"";
   if(diff===1)return"Yesterday";
   if(diff<7)return diff+"d ago";
   if(diff<30)return Math.floor(diff/7)+"w ago";
@@ -866,10 +871,11 @@ function daysAgo(key){
 }
 function mg(id){return M[id]}
 function logKey(){
-  // derive from logDateOffset
   const d=new Date();
-  d.setDate(d.getDate()+logDateOffset);
-  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+  // Use UTC offset arithmetic
+  const utcMs=Date.UTC(d.getUTCFullYear(),d.getUTCMonth(),d.getUTCDate())+(logDateOffset*86400000);
+  const dd=new Date(utcMs);
+  return dd.getUTCFullYear()+"-"+pad(dd.getUTCMonth()+1)+"-"+pad(dd.getUTCDate());
 }
 function goBackToToday(){
   logDateOffset=0;
@@ -1160,13 +1166,13 @@ function renderStats(){
 
   // Streak
   let streak = 0;
-  let chk = today;
+  let chkMs = keyToMs(today);
   for(let safety=0; safety<400; safety++){
-    if(!workouts[chk]) break;
+    const chk = new Date(chkMs);
+    const chkKey = chk.getUTCFullYear()+"-"+pad(chk.getUTCMonth()+1)+"-"+pad(chk.getUTCDate());
+    if(!workouts[chkKey]) break;
     streak++;
-    const pts = chk.split("-").map(Number);
-    const prev = new Date(pts[0], pts[1]-1, pts[2]-1);
-    chk = prev.getFullYear()+"-"+pad(prev.getMonth()+1)+"-"+pad(prev.getDate());
+    chkMs -= 86400000; // go back one day in ms
   }
 
   // Best streak
@@ -1179,10 +1185,11 @@ function renderStats(){
 
   // This week (Mon-today)
   const now = new Date();
-  const dowNow = now.getDay();
+  const dowNow = now.getUTCDay();
   const mondayOffset = dowNow===0 ? 6 : dowNow-1;
-  const mon = new Date(now); mon.setDate(now.getDate()-mondayOffset);
-  const monKey = mon.getFullYear()+"-"+pad(mon.getMonth()+1)+"-"+pad(mon.getDate());
+  const monMs = Date.UTC(now.getUTCFullYear(),now.getUTCMonth(),now.getUTCDate())-(mondayOffset*86400000);
+  const monD = new Date(monMs);
+  const monKey = monD.getUTCFullYear()+"-"+pad(monD.getUTCMonth()+1)+"-"+pad(monD.getUTCDate());
   const thisWeek = keys.filter(function(k){return k>=monKey;}).length;
 
   // This month
@@ -1190,8 +1197,9 @@ function renderStats(){
   const thisMonth = keys.filter(function(k){return k.startsWith(monthPfx);}).length;
 
   // Avg per week (last 4 weeks)
-  const fw = new Date(now); fw.setDate(now.getDate()-28);
-  const fwKey = fw.getFullYear()+"-"+pad(fw.getMonth()+1)+"-"+pad(fw.getDate());
+  const fwMs = Date.UTC(now.getUTCFullYear(),now.getUTCMonth(),now.getUTCDate())-(28*86400000);
+  const fwD = new Date(fwMs);
+  const fwKey = fwD.getUTCFullYear()+"-"+pad(fwD.getUTCMonth()+1)+"-"+pad(fwD.getUTCDate());
   const last4w = keys.filter(function(k){return k>=fwKey;}).length;
   const avgPerWeek = (last4w/4).toFixed(1);
 
