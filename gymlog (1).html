@@ -880,23 +880,25 @@ function logKey(){
 }
 function goBackToToday(){
   logDateOffset=0;
-  const tw=workouts[todayKey()];
-  todayDraft=tw?.muscles?[...tw.muscles]:[];
-  document.getElementById("log-notes").value=tw?.notes||"";
+  // Preserve current selection; only load today's existing if draft is empty
+  if(todayDraft.length === 0){
+    const tw=workouts[todayKey()];
+    todayDraft=tw?.muscles?[...tw.muscles]:[];
+    document.getElementById("log-notes").value=tw?.notes||"";
+  }
   renderLogCard();
 }
 function onDatePicked(val){
   if(!val) return;
-  // compute offset from today
-  const picked=new Date(val+"T12:00:00");
-  const today=new Date(); today.setHours(12,0,0,0);
-  const diff=Math.round((picked-today)/864e5);
-  if(diff>0) return; // no future
-  logDateOffset=diff;
-  const key=logKey();
-  const w=workouts[key];
-  todayDraft=w?.muscles?[...w.muscles]:[];
-  document.getElementById("log-notes").value=w?.notes||"";
+  const diff = Math.round((keyToMs(val) - keyToMs(todayKey())) / 86400000);
+  if(diff > 0) return; // no future
+  logDateOffset = diff;
+  // Only load existing workout if nothing currently selected
+  if(todayDraft.length === 0){
+    const w = workouts[logKey()];
+    todayDraft = w?.muscles ? [...w.muscles] : [];
+    document.getElementById("log-notes").value = w?.notes || "";
+  }
   renderLogCard();
 }
 
@@ -1564,14 +1566,14 @@ function dpSelectDay(key){
 function confirmDatePicker(){
   if(!dpSelectedKey) return;
   closeDatePicker();
-  // compute offset from today
-  const picked = new Date(dpSelectedKey+'T12:00:00');
-  const today  = new Date(); today.setHours(12,0,0,0);
-  logDateOffset = Math.round((picked-today)/864e5);
-  // load that day's workout into draft
-  const w = workouts[dpSelectedKey];
-  todayDraft = w?.muscles ? [...w.muscles] : [];
-  document.getElementById('log-notes').value = w?.notes || '';
+  // Set date offset using UTC ms math
+  logDateOffset = Math.round((keyToMs(dpSelectedKey) - keyToMs(todayKey())) / 86400000);
+  // Only load existing workout if user has nothing selected yet
+  if(todayDraft.length === 0){
+    const w = workouts[dpSelectedKey];
+    todayDraft = w?.muscles ? [...w.muscles] : [];
+    document.getElementById('log-notes').value = w?.notes || '';
+  }
   renderLogCard();
 }
 
