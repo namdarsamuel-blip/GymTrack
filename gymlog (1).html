@@ -785,7 +785,7 @@ button,textarea{font-family:inherit}
 
 <script>
 const SHEET_URL = "https://script.google.com/macros/s/AKfycbxG55J_qLCrQ8iS2HxGTpaR9E4EzEOsvB0mUOleNAYPkLMDdea3NS6erglPpKKzcMdoCw/exec";
-const CACHE_KEY = "gymlog_v8";
+const CACHE_KEY = "gymlog_v9";
 
 /* ── MUSCLES ── */
 const M = {
@@ -861,10 +861,11 @@ function dateDiff(olderKey,newerKey){
   return Math.round(ms/86400000);
 }
 function daysAgo(key){
+  if(!key||key.length<10)return"";
   const today=todayKey();
   if(key===today)return"Today";
   const diff=dateDiff(key,today);
-  if(!diff||isNaN(diff)||diff<0)return"";
+  if(isNaN(diff)||diff<=0)return"";
   if(diff===1)return"Yesterday";
   if(diff<7)return diff+"d ago";
   if(diff<30)return Math.floor(diff/7)+"w ago";
@@ -938,81 +939,84 @@ function renderAll(){renderSuggestions();renderRecent();renderLogCard();renderSt
 */
 function renderSuggestions(){
   const keys = Object.keys(workouts).sort(); // oldest to newest
-  const n = keys.length;
 
-  // How many sessions ago was this group last trained (0=last session, 99999=never)
   function recencyIndex(ids){
-    for(let i=keys.length-1; i>=0; i--){
-      const w=workouts[keys[i]];
-      if(ids.some(function(id){return w.muscles&&w.muscles.includes(id);})){
+    for(var i=keys.length-1;i>=0;i--){
+      var w=workouts[keys[i]];
+      if(ids.some(function(id){return w.muscles&&w.muscles.includes(id);}))
         return (keys.length-1)-i;
-      }
     }
     return 99999;
   }
 
-  // How many sessions have passed since this group was last trained
-  // i.e. how many times did you go to the gym and skip this group
   function skipCount(ids){
-    var skips = 0;
-    for(var i=keys.length-1; i>=0; i--){
-      var w = workouts[keys[i]];
+    var skips=0;
+    for(var i=keys.length-1;i>=0;i--){
+      var w=workouts[keys[i]];
       if(ids.some(function(id){return w.muscles&&w.muscles.includes(id);})) break;
-      skips++; // went to gym but not this group
+      skips++;
     }
     return skips;
   }
 
-  const ranked = SUG_GROUPS
+  function lastTrainedKey(ids){
+    for(var i=keys.length-1;i>=0;i--){
+      var w=workouts[keys[i]];
+      if(ids.some(function(id){return w.muscles&&w.muscles.includes(id);}))
+        return keys[i];
+    }
+    return null;
+  }
+
+  function lastTrainedLabel(ids){
+    var k=lastTrainedKey(ids);
+    if(!k) return "Never trained";
+    return daysAgo(k)||"Today";
+  }
+
+  var ranked = SUG_GROUPS
     .map(function(g){
       return {
-        label:g.label, sub:g.sub, ids:g.ids, c:g.c, bg:g.bg,
-        idx: recencyIndex(g.ids),
-        skips: skipCount(g.ids)
+        label:g.label, ids:g.ids, c:g.c, bg:g.bg,
+        idx:   recencyIndex(g.ids),
+        skips: skipCount(g.ids),
+        lastLbl: lastTrainedLabel(g.ids)
       };
     })
     .sort(function(a,b){return b.idx-a.idx;})
     .slice(0,3);
 
-  var html = "";
+  var out="";
   ranked.forEach(function(g,i){
-    var abbrs  = g.ids.map(function(id){return M[id]?M[id].abbr:id;}).join("+");
+    var abbrs   = g.ids.map(function(id){return M[id]?M[id].abbr:id;}).join("+");
     var idsAttr = g.ids.join(",");
 
-    // Skip badge — only show if 1+ skips
-    var skipBadge = "";
-    if(g.skips > 0){
-      var skipColor = g.skips >= 3 ? "#ff5252" : g.skips >= 2 ? "#fbbf24" : "#888";
-      skipBadge = '<div style="'
-        + 'display:flex;align-items:center;gap:3px;'
-        + 'font-size:11px;font-weight:700;'
-        + 'color:'+skipColor+';'
-        + 'background:'+skipColor+'18;'
-        + 'border:1px solid '+skipColor+'40;'
-        + 'border-radius:20px;'
-        + 'padding:2px 8px;'
-        + 'flex-shrink:0;'
-        + 'white-space:nowrap;'
-        + '">'
-        + '<span style="font-size:10px">⏭</span> '
-        + g.skips+'x'
-        + '</div>';
+    var skipBadge="";
+    if(g.skips>0){
+      var sc = g.skips>=3?"#ff5252":g.skips>=2?"#fbbf24":"#888";
+      var msg= g.skips===1?"skipped once":"skipped "+g.skips+"x";
+      skipBadge='<div style="'
+        +'display:flex;align-items:center;gap:3px;'
+        +'font-size:10px;font-weight:700;'
+        +'color:'+sc+';background:'+sc+'18;'
+        +'border:1px solid '+sc+'40;border-radius:20px;'
+        +'padding:2px 8px;flex-shrink:0;white-space:nowrap'
+        +'">⏭ '+msg+'</div>';
     }
 
-    html += '<div class="sug-card'+(i===0?" pri":"")
-      +'" data-ids="'+idsAttr+'" onclick="handleSugClick(this)">'
+    out+='<div class="sug-card'+(i===0?" pri":"")+'" data-ids="'+idsAttr+'" onclick="handleSugClick(this)">'
       +'<div class="sug-rank">'+(i+1)+'</div>'
       +'<div class="sug-badge" style="background:'+g.bg+';color:'+g.c+'">'+abbrs+'</div>'
       +'<div class="sug-info">'
         +'<div class="sug-name">'+g.label+'</div>'
-        +(g.sub?'<div class="sug-detail">'+g.sub+'</div>':"")
+        +'<div class="sug-detail" style="color:var(--sub);font-size:11px">Last: '+g.lastLbl+'</div>'
       +'</div>'
       +skipBadge
       +'<div class="sug-arr">›</div>'
       +'</div>';
   });
 
-  document.getElementById("sug-wrap").innerHTML = html;
+  document.getElementById("sug-wrap").innerHTML=out;
 }
 
 function handleSugClick(el){
@@ -1407,7 +1411,7 @@ function openEdit(key){
   editKey=key;const w=workouts[key];editDraft=w?.muscles?[...w.muscles]:[];
   document.getElementById("edit-dl").textContent=fmtF(key);
   document.getElementById("edit-notes").value=w?.notes||"";
-  document.getElementById("edit-del").style.display=workouts[key]?"block":"none";
+  document.getElementById("edit-del").style.display="block"; // always show for existing workouts
   document.getElementById("edit-del-confirm").style.display="none";
   document.getElementById("edit-del-cancel").style.display="none";
   document.getElementById("edit-pair").style.display="none";
