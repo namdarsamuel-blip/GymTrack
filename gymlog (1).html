@@ -938,80 +938,87 @@ function renderAll(){renderSuggestions();renderRecent();renderLogCard();renderSt
    Show top 3, sorted most-overdue first. No date text shown.
 */
 function renderSuggestions(){
-  const keys = Object.keys(workouts).sort(); // oldest to newest
+  var keys = Object.keys(workouts).sort();
 
-  function recencyIndex(ids){
+  function lastKey(ids){
     for(var i=keys.length-1;i>=0;i--){
       var w=workouts[keys[i]];
-      if(ids.some(function(id){return w.muscles&&w.muscles.includes(id);}))
-        return (keys.length-1)-i;
-    }
-    return 99999;
-  }
-
-  function skipCount(ids){
-    var skips=0;
-    for(var i=keys.length-1;i>=0;i--){
-      var w=workouts[keys[i]];
-      if(ids.some(function(id){return w.muscles&&w.muscles.includes(id);})) break;
-      skips++;
-    }
-    return skips;
-  }
-
-  function lastTrainedKey(ids){
-    for(var i=keys.length-1;i>=0;i--){
-      var w=workouts[keys[i]];
-      if(ids.some(function(id){return w.muscles&&w.muscles.includes(id);}))
-        return keys[i];
+      if(w.muscles&&ids.some(function(id){return w.muscles.includes(id);})) return keys[i];
     }
     return null;
   }
 
-  function lastTrainedLabel(ids){
-    var k=lastTrainedKey(ids);
-    if(!k) return "Never trained";
-    return daysAgo(k)||"Today";
+  function recencyIndex(ids){
+    for(var i=keys.length-1;i>=0;i--){
+      var w=workouts[keys[i]];
+      if(w.muscles&&ids.some(function(id){return w.muscles.includes(id);})) return (keys.length-1)-i;
+    }
+    return 99999;
   }
 
-  var ranked = SUG_GROUPS
-    .map(function(g){
-      return {
-        label:g.label, ids:g.ids, c:g.c, bg:g.bg,
-        idx:   recencyIndex(g.ids),
-        skips: skipCount(g.ids),
-        lastLbl: lastTrainedLabel(g.ids)
-      };
-    })
-    .sort(function(a,b){return b.idx-a.idx;})
-    .slice(0,3);
+  // True skips: times this group was #1 most-overdue and you trained something else
+  function trueSkips(targetIds){
+    var skips=0;
+    for(var s=0;s<keys.length;s++){
+      var sm=workouts[keys[s]].muscles||[];
+      if(targetIds.some(function(id){return sm.includes(id);})){skips=0;continue;}
+      var pastKeys=keys.slice(0,s);
+      var topGroup=null,topIdx=-1;
+      SUG_GROUPS.forEach(function(g){
+        var lastSeen=-1;
+        for(var p=pastKeys.length-1;p>=0;p--){
+          var pm=workouts[pastKeys[p]].muscles||[];
+          if(g.ids.some(function(id){return pm.includes(id);})){lastSeen=p;break;}
+        }
+        var ri=lastSeen===-1?99999:(pastKeys.length-1)-lastSeen;
+        if(ri>topIdx){topIdx=ri;topGroup=g;}
+      });
+      if(topGroup&&topGroup.ids.join(",")===targetIds.join(",")) skips++;
+    }
+    return skips;
+  }
+
+  var ranked=SUG_GROUPS.map(function(g){
+    var lk=lastKey(g.ids);
+    return{label:g.label,ids:g.ids,c:g.c,bg:g.bg,idx:recencyIndex(g.ids),skips:trueSkips(g.ids),lastKey:lk};
+  }).sort(function(a,b){return b.idx-a.idx;}).slice(0,3);
 
   var out="";
   ranked.forEach(function(g,i){
-    var abbrs   = g.ids.map(function(id){return M[id]?M[id].abbr:id;}).join("+");
-    var idsAttr = g.ids.join(",");
+    var abbrs=g.ids.map(function(id){return M[id]?M[id].abbr:id;}).join("+");
+    var idsAttr=g.ids.join(",");
 
-    var skipBadge="";
-    if(g.skips>0){
-      var sc = g.skips>=3?"#ff5252":g.skips>=2?"#fbbf24":"#888";
-      var msg= g.skips===1?"skipped once":"skipped "+g.skips+"x";
-      skipBadge='<div style="'
-        +'display:flex;align-items:center;gap:3px;'
-        +'font-size:10px;font-weight:700;'
-        +'color:'+sc+';background:'+sc+'18;'
-        +'border:1px solid '+sc+'40;border-radius:20px;'
-        +'padding:2px 8px;flex-shrink:0;white-space:nowrap'
-        +'">⏭ '+msg+'</div>';
+    // Last trained label
+    var lastLbl="Never";
+    if(g.lastKey){
+      var d=dateDiff(g.lastKey,todayKey());
+      if(d===0) lastLbl="Today";
+      else if(d===1) lastLbl="Yesterday";
+      else if(d<7)  lastLbl=d+"d ago";
+      else if(d<30) lastLbl=Math.floor(d/7)+"w ago";
+      else          lastLbl=Math.floor(d/30)+"mo ago";
     }
+
+    // Skip badge — only if skipped at least once while it was #1
+    var skipHtml="";
+    if(g.skips>0){
+      var sc=g.skips>=3?"#ff5252":g.skips>=2?"#fbbf24":"#888";
+      skipHtml=' <span style="'
+        +'font-size:10px;font-weight:700;color:'+sc+';'
+        +'background:'+sc+'18;border:1px solid '+sc+'40;'
+        +'border-radius:20px;padding:1px 7px;white-space:nowrap;vertical-align:middle'
+        +'">⏭ '+g.skips+'x</span>';
+    }
+
+    var nameColor=i===0?g.c:"var(--text)";
 
     out+='<div class="sug-card'+(i===0?" pri":"")+'" data-ids="'+idsAttr+'" onclick="handleSugClick(this)">'
       +'<div class="sug-rank">'+(i+1)+'</div>'
       +'<div class="sug-badge" style="background:'+g.bg+';color:'+g.c+'">'+abbrs+'</div>'
-      +'<div class="sug-info">'
-        +'<div class="sug-name">'+g.label+'</div>'
-        +'<div class="sug-detail" style="color:var(--sub);font-size:11px">Last: '+g.lastLbl+'</div>'
+      +'<div class="sug-info" style="flex:1;min-width:0">'
+        +'<div class="sug-name" style="color:'+nameColor+'">'+g.label+'</div>'
+        +'<div class="sug-detail" style="color:var(--sub);font-size:11px">Last: '+lastLbl+skipHtml+'</div>'
       +'</div>'
-      +skipBadge
       +'<div class="sug-arr">›</div>'
       +'</div>';
   });
